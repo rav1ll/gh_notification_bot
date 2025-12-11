@@ -4,6 +4,7 @@ import logging
 import asyncio
 from aiohttp import web
 
+
 from config import Config
 from redis_storage import storage
 from event_handlers import (
