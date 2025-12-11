@@ -7,7 +7,17 @@ def format_push_event(payload: dict) -> tuple[str, str]:
     repo_name = repo.get("full_name", "Unknown")
     ref = payload.get("ref", "").replace("refs/heads/", "")
     commits = payload.get("commits", [])
-    pusher = payload.get("pusher", {}).get("name", "Unknown")
+
+    # Безопасное получение pusher/sender
+    pusher = None
+    if "pusher" in payload and payload["pusher"]:
+        pusher = payload["pusher"].get("name") or payload["pusher"].get("login")
+    if not pusher and "sender" in payload and payload["sender"]:
+        pusher = payload["sender"].get("login")
+    if not pusher and "actor" in payload and payload["actor"]:
+        pusher = payload["actor"].get("login")
+    pusher = pusher or "Unknown"
+
     compare_url = payload.get("compare", "")
 
     text = f"<b>Push в {repo_name}</b>\n"
@@ -40,14 +50,21 @@ def format_issues_event(payload: dict) -> tuple[str, str]:
     Форматирование события issues
     """
 
-    action = payload.get("action")
+    action = payload.get("action", "unknown")
     issue = payload.get("issue", {})
     repo = payload.get("repository", {})
     repo_name = repo.get("full_name", "Unknown")
-    sender = payload.get("sender", {}).get("login", "Unknown")
 
-    issue_number = issue.get("number")
-    issue_title = issue.get("title", "")
+    # Безопасное получение sender
+    sender = None
+    if "sender" in payload and payload["sender"]:
+        sender = payload["sender"].get("login")
+    if not sender and "actor" in payload and payload["actor"]:
+        sender = payload["actor"].get("login")
+    sender = sender or "Unknown"
+
+    issue_number = issue.get("number", 0)
+    issue_title = issue.get("title", "No title")
     issue_url = issue.get("html_url", "")
     issue_body = issue.get("body", "") or ""
 
@@ -71,7 +88,8 @@ def format_issues_event(payload: dict) -> tuple[str, str]:
             body_preview += "..."
         text += f"<blockquote>{body_preview}</blockquote>\n"
 
-    text += f"\n<a href='{issue_url}'>Открыть issue</a>"
+    if issue_url:
+        text += f"\n<a href='{issue_url}'>Открыть issue</a>"
 
     event_key = f"issue:{repo_name}:{issue_number}"
 
@@ -274,24 +292,51 @@ def get_event_handler(event_type: str):
 def get_author_from_event(event_type: str, payload: dict) -> Optional[str]:
     """
     Получить автора события
+    Поддерживает как webhook события, так и Events API
     """
 
-    if event_type == "push":
-        return payload.get("pusher", {}).get("name")
-    return payload.get("sender", {}).get("login")
+    # Для push событий
+    if event_type in ("push", "PushEvent"):
+        # Webhook
+        pusher = payload.get("pusher", {})
+        if pusher:
+            return pusher.get("name") or pusher.get("login")
+        # Events API может использовать другую структуру
+        return payload.get("sender", {}).get("login")
+
+    # Для остальных событий - берём sender.login
+    sender = payload.get("sender", {})
+    if sender:
+        return sender.get("login")
+
+    # Fallback - может быть в других полях
+    return payload.get("actor", {}).get("login")
 
 
 def get_event_type_for_filter(event_type: str) -> str:
     """
     Преобразовать тип события GitHub в тип для фильтра
+    Поддерживает как webhook события, так и Events API
     """
 
     mapping = {
+        # Webhook event types
         "push": "push",
         "issues": "issues",
         "issue_comment": "issues",
         "pull_request": "pull_request",
         "pull_request_review_comment": "pull_request",
-        "workflow_run": "workflow_run"
+        "workflow_run": "workflow_run",
+
+        # Events API event types
+        "PushEvent": "push",
+        "IssuesEvent": "issues",
+        "IssueCommentEvent": "issues",
+        "PullRequestEvent": "pull_request",
+        "PullRequestReviewEvent": "pull_request",
+        "PullRequestReviewCommentEvent": "pull_request",
+        "WorkflowRunEvent": "workflow_run",
+        "CreateEvent": "push",  # Создание ветки/тега
+        "DeleteEvent": "push",  # Удаление ветки/тега
     }
     return mapping.get(event_type, event_type)

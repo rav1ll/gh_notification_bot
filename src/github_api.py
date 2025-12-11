@@ -16,7 +16,7 @@ class GitHubAPI:
         """
 
         patterns = [
-            r"github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$",
+            r"(?:https?://)?github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$",
             r"^([^/]+)/([^/]+)$"
         ]
         for pattern in patterns:

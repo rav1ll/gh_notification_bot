@@ -5,7 +5,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
 from config import Config
 from redis_storage import storage
@@ -29,6 +29,167 @@ class FilterStates(StatesGroup):
     waiting_for_events = State()
 
 
+# === Клавиатура с кнопками ===
+
+def get_main_keyboard():
+    """
+    Главная клавиатура с кнопками команд
+    """
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text="📝 Подписаться"),
+                KeyboardButton(text="📋 Мои подписки")
+            ],
+            [
+                KeyboardButton(text="⚙️ Фильтры"),
+                KeyboardButton(text="❌ Отписаться")
+            ],
+            [
+                KeyboardButton(text="ℹ️ Помощь")
+            ]
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Выберите действие..."
+    )
+    return keyboard
+
+
+# === Обработчики кнопок (должны быть первыми!) ===
+
+@dp.message(F.text == "📝 Подписаться")
+async def button_subscribe(message: types.Message, state: FSMContext):
+    """
+    Обработка нажатия кнопки Подписаться
+    """
+    await state.clear()  # Сбрасываем предыдущее состояние
+    await state.set_state(SubscribeStates.waiting_for_repo)
+    await message.answer(
+        "Отправьте ссылку на GitHub репозиторий:\n"
+        "Например: <code>https://github.com/owner/repo</code>",
+        parse_mode="HTML"
+    )
+
+
+@dp.message(F.text == "📋 Мои подписки")
+async def button_list(message: types.Message, state: FSMContext):
+    """
+    Обработка нажатия кнопки Мои подписки
+    """
+    await state.clear()  # Сбрасываем предыдущее состояние
+
+    chat_id = message.chat.id
+    subs = storage.get_all_subscriptions(chat_id)
+
+    if not subs:
+        await message.answer("У вас нет активных подписок.\nИспользуйте /subscribe для подписки")
+        return
+
+    text = "<b>Ваши подписки:</b>\n\n"
+    for repo_url, data in subs.items():
+        filters = data.get("filters", {})
+        excluded = filters.get("excluded_authors", [])
+        events = filters.get("event_types", [])
+
+        text += f"<a href='{repo_url}'>{repo_url.replace('https://github.com/', '')}</a>\n"
+        if events:
+            text += f"События: {', '.join(events)}\n"
+        else:
+            text += f"События: все\n"
+        if excluded:
+            text += f"Исключены: {', '.join(excluded)}\n"
+        text += "\n"
+
+    await message.answer(text, parse_mode="HTML", disable_web_page_preview=True)
+
+
+@dp.message(F.text == "⚙️ Фильтры")
+async def button_filters(message: types.Message, state: FSMContext):
+    """
+    Обработка нажатия кнопки Фильтры
+    """
+    await state.clear()  # Сбрасываем предыдущее состояние
+
+    chat_id = message.chat.id
+    subs = storage.get_all_subscriptions(chat_id)
+
+    if not subs:
+        await message.answer("У вас нет активных подписок")
+        return
+
+    keyboard = []
+    for repo_url in subs.keys():
+        repo_name = repo_url.replace("https://github.com/", "")
+        keyboard.append([InlineKeyboardButton(
+            text=repo_name,
+            callback_data=f"filter_repo:{repo_url}"
+        )])
+
+    await state.set_state(FilterStates.waiting_for_repo_choice)
+    await message.answer(
+        "Выберите репозиторий для настройки фильтров:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+    )
+
+
+@dp.message(F.text == "❌ Отписаться")
+async def button_unsubscribe(message: types.Message, state: FSMContext):
+    """
+    Обработка нажатия кнопки Отписаться
+    """
+    await state.clear()  # Сбрасываем предыдущее состояние
+
+    chat_id = message.chat.id
+    subs = storage.get_all_subscriptions(chat_id)
+
+    if not subs:
+        await message.answer("У вас нет активных подписок на репозитории")
+        return
+
+    keyboard = []
+    for repo_url in subs.keys():
+        repo_name = repo_url.replace("https://github.com/", "")
+        keyboard.append([InlineKeyboardButton(
+            text=repo_name,
+            callback_data=f"unsub:{repo_url}"
+        )])
+
+    await message.answer(
+        "Выберите репозиторий для отписки:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+    )
+
+
+@dp.message(F.text == "ℹ️ Помощь")
+async def button_help(message: types.Message, state: FSMContext):
+    """
+    Обработка нажатия кнопки Помощь
+    """
+    await state.clear()  # Сбрасываем предыдущее состояние
+
+    text = """
+    <b>Как использовать бота:</b>
+
+    1️⃣ <b>Подписка на репозиторий</b>
+       /subscribe - введите ссылку на репозиторий
+       Пример: https://github.com/owner/repo
+
+    2️⃣ <b>Настройка фильтров</b>
+       /filters - выбрать репозиторий - настроить:
+       • Исключить авторов (например, dependabot)
+       • Выбрать типы событий
+
+    3️⃣ <b>Отписка</b>
+       /unsubscribe - выбрать репозиторий
+
+    <b>Формат уведомлений:</b>
+    • Push: список коммитов с авторами
+    • Issues/PR: текст с комментарием
+    • Actions: статус выполнения workflow
+    """
+    await message.answer(text, parse_mode="HTML")
+
+
 # === Команды ===
 
 @dp.message(Command("start"))
@@ -37,25 +198,19 @@ async def cmd_start(message: types.Message):
     Приветственное сообщение
     """
     text = """
-    
 🤖 <b>GitHub Notification Bot</b>
 
-    Бот для получения уведомлений о событиях в GitHub репозиториях
-    
-    <b>Доступные команды:</b>
-    /subscribe - Подписаться на репозиторий
-    /unsubscribe - Отписаться от репозитория
-    /list - Список подписок
-    /filters - Настроить фильтры
-    /help - Помощь
-    
-    <b>Поддерживаемые события:</b>
-    • Push (новые коммиты)
-    • Issues (создание, комментарии)
-    • Pull Requests (создание, комментарии)
-    • GitHub Actions (запуск, статус выполнения)
+Бот для получения уведомлений о событиях в GitHub репозиториях
+
+<b>Поддерживаемые события:</b>
+• Push (новые коммиты)
+• Issues (создание, комментарии)
+• Pull Requests (создание, комментарии)
+• GitHub Actions (запуск, статус выполнения)
+
+Используйте кнопки ниже для управления подписками!
     """
-    await message.answer(text, parse_mode="HTML")
+    await message.answer(text, parse_mode="HTML", reply_markup=get_main_keyboard())
 
 
 @dp.message(Command("help"))
@@ -68,7 +223,7 @@ async def cmd_help(message: types.Message):
     <b>Как использовать бота:</b>
     
     1️⃣ <b>Подписка на репозиторий</b>
-       /subscribe → введите ссылку на репозиторий
+       /subscribe - введите ссылку на репозиторий
        Пример: https://github.com/owner/repo
     
     2️⃣ <b>Настройка фильтров</b>
@@ -132,27 +287,21 @@ async def process_repo_url(message: types.Message, state: FSMContext):
         await state.clear()
         return
 
-    # настройка webhook
-    await message.answer("Настройка webhook...")
-    webhook_id = github_api.create_webhook(owner, repo_name)
-
-    if not webhook_id:
-        await message.answer(
-            "Не удалось создать webhook. Убедитесь, что токен настроен с admin:repo_hook\n"
-            "Подписка создана, но уведомления могут не приходить"
-        )
-
-    # сохранение подписку
-    storage.add_subscription(chat_id, repo_url, webhook_id)
+    # сохранение подписки
+    await message.answer("Настройка подписки...")
+    storage.add_subscription(chat_id, repo_url, webhook_id=None)
     storage.add_repo_chat_mapping(repo_url, chat_id)
+    logger.info(f"Subscription created: chat_id={chat_id}, repo={repo_url}")
 
     await message.answer(
-        f" <b>Подписка оформлена!</b>\n\n"
-        f" <b>{repo_info['full_name']}</b>\n"
-        f" {repo_info['description'] or 'Без описания'}\n"
-        f" {repo_info['stars']} stars\n\n"
-        f"Используйте /filters для настройки фильтров",
-        parse_mode="HTML"
+        f"✅ <b>Подписка оформлена!</b>\n\n"
+        f"<b>{repo_info['full_name']}</b>\n"
+        f"{repo_info['description'] or 'Без описания'}\n"
+        f"{repo_info['stars']} stars\n\n"
+        f"Бот будет проверять новые события каждую минуту.\n"
+        f"Используйте кнопку <b> Фильтры</b> для настройки фильтров",
+        parse_mode="HTML",
+        reply_markup=get_main_keyboard()
     )
     await state.clear()
 
@@ -177,7 +326,10 @@ async def cmd_list(message: types.Message):
         events = filters.get("event_types", [])
 
         text += f"<a href='{repo_url}'>{repo_url.replace('https://github.com/', '')}</a>\n"
-        text += f"События: {', '.join(events)}\n"
+        if events:
+            text += f"События: {', '.join(events)}\n"
+        else:
+            text += f"События: все\n"
         if excluded:
             text += f"Исключены: {', '.join(excluded)}\n"
         text += "\n"
@@ -287,8 +439,12 @@ async def process_filter_repo(callback: types.CallbackQuery, state: FSMContext):
     filters = storage.get_filters(callback.message.chat.id, repo_url)
     text = f"<b>Фильтры для {repo_url.replace('https://github.com/', '')}</b>\n\n"
     if filters:
-        text += f"Исключённые авторы: {', '.join(filters['excluded_authors']) or 'не выбрано'}\n"
-        text += f"Типы событий: {', '.join(filters['event_types'])}"
+        excluded = filters.get('excluded_authors', [])
+        events = filters.get('event_types', [])
+        text += f"Исключённые авторы: {', '.join(excluded) if excluded else 'не выбрано'}\n"
+        text += f"Типы событий: {', '.join(events) if events else 'все'}"
+    else:
+        text += "Фильтры не настроены"
 
     await callback.message.edit_text(text, parse_mode="HTML",
                                       reply_markup=keyboard)
@@ -322,12 +478,13 @@ async def filter_remove_author(callback: types.CallbackQuery, state: FSMContext)
     repo_url = data.get("repo_url")
     filters = storage.get_filters(callback.message.chat.id, repo_url)
 
-    if not filters or not filters["excluded_authors"]:
+    excluded_authors = filters.get("excluded_authors", []) if filters else []
+    if not excluded_authors:
         await callback.answer("Нет исключенных авторов", show_alert=True)
         return
 
     keyboard = []
-    for author in filters["excluded_authors"]:
+    for author in excluded_authors:
         keyboard.append([InlineKeyboardButton(
             text=author,
             callback_data=f"rm_author:{author}"
@@ -389,7 +546,7 @@ async def filter_events(callback: types.CallbackQuery, state: FSMContext):
 
     keyboard = []
     for event in all_events:
-        status = "YES" if event in current_events else "NO"
+        status = "✅" if event in current_events else "❌"
         keyboard.append([InlineKeyboardButton(
             text=f"{status} {event}",
             callback_data=f"toggle_event:{event}"
@@ -425,7 +582,7 @@ async def toggle_event(callback: types.CallbackQuery, state: FSMContext):
     all_events = ["push", "issues", "pull_request", "workflow_run"]
     keyboard = []
     for e in all_events:
-        status = "YES" if e in selected else "NO"
+        status = "✅" if e in selected else "❌"
         keyboard.append([InlineKeyboardButton(
             text=f"{status} {e}",
             callback_data=f"toggle_event:{e}"

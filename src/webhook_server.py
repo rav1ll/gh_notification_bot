@@ -15,9 +15,6 @@ from event_handlers import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Ссылка на функцию отправки сообщений из бота (будет установлена при запуске)
-send_notification_func = None
-
 
 def verify_signature(payload: bytes, signature: str) -> bool:
     """
@@ -41,7 +38,8 @@ async def handle_github_webhook(request: web.Request) -> web.Response:
     Обработчик GitHub webhook
     """
 
-
+    # получение функции отправки из app state
+    send_notification_func = request.app.get('notification_func')
 
     # получение заголовка
     event_type = request.headers.get("X-GitHub-Event")
@@ -65,9 +63,11 @@ async def handle_github_webhook(request: web.Request) -> web.Response:
         return web.Response(status=401, text="Invalid signature")
 
     logger.info(f"Received event: {event_type}, delivery: {delivery_id}")
+    logger.info(f"Payload preview: repository={payload.get('repository', {}).get('full_name')}, action={payload.get('action')}")
 
     # ping
     if event_type == "ping":
+        logger.info("Received ping event - webhook is configured correctly!")
         return web.Response(text="pong")
 
     # получение обработчика события
@@ -90,8 +90,10 @@ async def handle_github_webhook(request: web.Request) -> web.Response:
     repo_url = repo.get("html_url", "")
 
     if not repo_url:
+        logger.warning("No repository URL in payload")
         return web.Response(text="OK")
     repo_url = repo_url.rstrip("/")
+    logger.info(f"Processing event for repository: {repo_url}")
 
     # получение автора события
     author = get_author_from_event(event_type, payload)
@@ -101,13 +103,18 @@ async def handle_github_webhook(request: web.Request) -> web.Response:
     chat_ids = storage.get_chats_for_repo(repo_url)
     logger.info(f"Found {len(chat_ids)} subscribed chats for {repo_url}")
 
+    if not chat_ids:
+        logger.warning(f"No subscribed chats for repository {repo_url}")
+        return web.Response(text="OK")
+
     for chat_id in chat_ids:
         # фильтры для этого чата
         filters = storage.get_filters(chat_id, repo_url)
 
         if filters:
-            # проверка, включён ли тип события
-            if filter_event_type not in filters.get("event_types", []):
+            # проверка, включён ли тип события (только если event_types не пустой)
+            event_types = filters.get("event_types", [])
+            if event_types and filter_event_type not in event_types:
                 logger.info(f"Event type {filter_event_type} filtered out for chat {chat_id}")
                 continue
 
@@ -118,6 +125,7 @@ async def handle_github_webhook(request: web.Request) -> web.Response:
                 continue
 
         # отправка уведомлений
+        logger.info(f"Sending notification to chat {chat_id}")
         if send_notification_func:
             try:
                 # необходимость редактирования сообщения
@@ -128,9 +136,11 @@ async def handle_github_webhook(request: web.Request) -> web.Response:
                     event_key=event_key,
                     edit_existing=edit_existing
                 )
-                logger.info(f"Notification sent to chat {chat_id}")
+                logger.info(f"✅ Notification sent successfully to chat {chat_id}")
             except Exception as e:
-                logger.error(f"Failed to send notification to {chat_id}: {e}")
+                logger.error(f"❌ Failed to send notification to {chat_id}: {e}", exc_info=True)
+        else:
+            logger.error("❌ send_notification_func is not set!")
 
     return web.Response(text="OK")
 
@@ -143,12 +153,17 @@ async def health_check(request: web.Request) -> web.Response:
     return web.Response(text="OK")
 
 
-def create_app() -> web.Application:
+def create_app(notification_func=None) -> web.Application:
     """
     Создание веб-приложения
     """
 
     app = web.Application()
+
+    # сохраняем функцию в app state
+    if notification_func:
+        app['notification_func'] = notification_func
+
     app.router.add_post("/webhook/github", handle_github_webhook)
     app.router.add_get("/health", health_check)
     return app
@@ -159,10 +174,7 @@ async def start_webhook_server(notification_func=None):
     Запуск webhook сервера
     """
 
-
-    send_notification_func = notification_func
-
-    app = create_app()
+    app = create_app(notification_func)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", Config.WEBHOOK_PORT)

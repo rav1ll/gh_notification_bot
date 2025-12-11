@@ -184,5 +184,21 @@ class RedisStorage:
         key = f"messages:{chat_id}"
         self.client.hdel(key, event_key)
 
+    def set_last_event_id(self, repo_url: str, event_id: str):
+        """
+        Сохранить ID последнего обработанного события для репозитория
+        """
+
+        key = f"last_event:{repo_url}"
+        self.client.set(key, event_id)
+
+    def get_last_event_id(self, repo_url: str) -> Optional[str]:
+        """
+        Получить ID последнего обработанного события для репозитория
+        """
+
+        key = f"last_event:{repo_url}"
+        return self.client.get(key)
+
 
 storage = RedisStorage()

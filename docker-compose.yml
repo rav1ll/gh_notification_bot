@@ -8,9 +8,9 @@ services:
     command: >
       sh -c "
       if [ -n \"$$REDIS_PASSWORD\" ]; then
-        redis-server --requirepass $$REDIS_PASSWORD
+        redis-server --requirepass $$REDIS_PASSWORD --appendonly yes --save 60 1 --save 300 10 --save 900 1
       else
-        redis-server
+        redis-server --appendonly yes --save 60 1 --save 300 10 --save 900 1
       fi
       "
     environment:
