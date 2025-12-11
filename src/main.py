@@ -35,7 +35,7 @@ async def main():
     webhook_runner = await start_webhook_server(notification_func=send_notification)
 
     # запуск GitHub polling (опрос событий)
-    poller = GitHubPoller(notification_func=send_notification, poll_interval=60)
+    poller = GitHubPoller(notification_func=send_notification, poll_interval=30)
     polling_task = asyncio.create_task(poller.start())
     logger.info("GitHub polling task created")
 
