@@ -12,6 +12,7 @@ from event_handlers import (
     format_pull_request_event,
     format_pr_review_comment_event,
     format_workflow_run_event,
+    format_create_event,
     get_event_type_for_filter,
     get_author_from_event
 )
@@ -302,6 +303,7 @@ class GitHubPoller:
             "PullRequestEvent": format_pull_request_event,
             "PullRequestReviewCommentEvent": format_pr_review_comment_event,
             "WorkflowRunEvent": format_workflow_run_event,
+            "CreateEvent": format_create_event,
         }
 
         handler = handlers.get(event_type)
