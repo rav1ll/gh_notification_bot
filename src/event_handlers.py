@@ -8,6 +8,11 @@ def format_push_event(payload: dict) -> tuple[str, str]:
     ref = payload.get("ref", "").replace("refs/heads/", "")
     commits = payload.get("commits", [])
 
+    # GitHub Events API может не возвращать commits, используем size
+    if not commits:
+        size = payload.get("size", 0)
+        commits = []  # Будем показывать количество, но не детали
+
     # Безопасное получение pusher/sender
     pusher = None
     if "pusher" in payload and payload["pusher"]:
@@ -31,6 +36,8 @@ def format_push_event(payload: dict) -> tuple[str, str]:
         text += f"Ветка: <code>{ref}</code>\n"
     text += f"Автор: {pusher}\n\n"
 
+    commit_count = payload.get("size", len(commits))
+
     if commits:
         text += f"<b>Коммиты ({len(commits)}):</b>\n"
         for commit in commits[:10]:  # выводим 10 коммитов
@@ -42,6 +49,9 @@ def format_push_event(payload: dict) -> tuple[str, str]:
 
         if len(commits) > 10:
             text += f"\n... и ещё {len(commits) - 10} коммитов\n"
+    elif commit_count > 0:
+        # Если commits не переданы, но есть size
+        text += f"{commit_count} коммит(ов)\n"
 
     if compare_url:
         text += f'\n<a href="{compare_url}">Сравнить изменения</a>'
@@ -154,11 +164,11 @@ def format_pull_request_event(payload: dict) -> tuple[str, str]:
     sender = payload.get("sender", {}).get("login", "Unknown")
 
     pr_number = pr.get("number")
-    pr_title = pr.get("title", "")
+    pr_title = pr.get("title", "") or "Без названия"
     pr_url = pr.get("html_url", "")
     pr_body = pr.get("body", "") or ""
-    base_branch = pr.get("base", {}).get("ref", "")
-    head_branch = pr.get("head", {}).get("ref", "")
+    base_branch = pr.get("base", {}).get("ref", "unknown")
+    head_branch = pr.get("head", {}).get("ref", "unknown")
 
     actions_map = {
         "opened": "Создан новый PR",
@@ -213,10 +223,10 @@ def format_pr_review_comment_event(payload: dict) -> tuple[str, str]:
     sender = payload.get("sender", {}).get("login", "Unknown")
 
     pr_number = pr.get("number")
-    pr_title = pr.get("title", "")
+    pr_title = pr.get("title", "") or "Без названия"
     comment_body = comment.get("body", "") or ""
     comment_url = comment.get("html_url", "")
-    path = comment.get("path", "")
+    path = comment.get("path", "unknown file")
 
     text = f"<b>Комментарий к коду в PR</b>\n"
     text += f"{repo_name}\n"

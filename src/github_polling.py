@@ -154,9 +154,11 @@ class GitHubPoller:
 
         # Добавляем информацию о репозитории в payload
         if "repository" not in payload:
+            # event.repo.name содержит полное имя "owner/repo"
+            full_name = event.repo.name if '/' in event.repo.name else repo_url.replace("https://github.com/", "")
             payload["repository"] = {
                 "html_url": repo_url,
-                "full_name": f"{event.repo.name}"
+                "full_name": full_name
             }
 
         # Добавляем sender и actor (для совместимости)
@@ -223,9 +225,11 @@ class GitHubPoller:
 
             # Добавляем информацию о репозитории
             if "repository" not in payload:
+                # event.repo.name содержит полное имя "owner/repo"
+                full_name = event.repo.name if '/' in event.repo.name else repo_url.replace("https://github.com/", "")
                 payload["repository"] = {
                     "html_url": repo_url,
-                    "full_name": f"{event.repo.name}"
+                    "full_name": full_name
                 }
 
             # Добавляем sender/actor
@@ -264,10 +268,17 @@ class GitHubPoller:
         grouped_text += f"<i>Новые события ({len(filtered_events)})</i>\n\n"
 
         for i, (event_type, text) in enumerate(filtered_events, 1):
-            # Убираем повторяющееся название репозитория из каждого события
-            text = text.replace(f"<b>{repo_name}</b>", "").replace(f"{repo_name}", "")
+            # Убираем только первую строку с названием репозитория из каждого события
+            lines = text.split('\n')
+            # Ищем и удаляем строку с названием репозитория в начале (без форматирования)
+            if len(lines) > 1 and repo_name in lines[1]:
+                # Если вторая строка содержит только название репо (может быть с тегами)
+                if lines[1].strip() == repo_name or lines[1].strip() == f"<b>{repo_name}</b>":
+                    lines.pop(1)
+            text = '\n'.join(lines)
+
             grouped_text += f"{'─' * 30}\n"
-            grouped_text += text + "\n\n"
+            grouped_text += text.strip() + "\n"
 
         # Отправляем
         if self.notification_func:
