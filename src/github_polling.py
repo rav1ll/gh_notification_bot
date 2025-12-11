@@ -116,8 +116,27 @@ class GitHubPoller:
 
             logger.info(f"Found {len(new_events)} new events for {repo_url}")
 
-            for event in new_events:
-                await self.process_event(repo_url, event)
+            # Получаем подписанные чаты
+            chat_ids = storage.get_chats_for_repo(repo_url)
+
+            if not chat_ids:
+                logger.warning(f"⚠️ No subscribed chats for {repo_url}")
+                # Сохраняем ID последнего события даже если нет подписчиков
+                if new_events:
+                    storage.set_last_event_id(repo_url, new_events[-1].id)
+                return
+
+            # Группируем события по чатам с учетом настроек группировки
+            for chat_id in chat_ids:
+                group_events = storage.get_group_events(chat_id, repo_url)
+
+                if group_events:
+                    # Отправляем все события одним сообщением
+                    await self.send_grouped_events(chat_id, repo_url, new_events)
+                else:
+                    # Отправляем каждое событие отдельно
+                    for event in new_events:
+                        await self.process_event(repo_url, event, chat_id)
 
             # Сохраняем ID последнего обработанного события
             if new_events:
@@ -128,8 +147,8 @@ class GitHubPoller:
         except Exception as e:
             logger.error(f"Error polling {repo_url}: {e}", exc_info=True)
 
-    async def process_event(self, repo_url: str, event):
-        """Обработка одного события"""
+    async def process_event(self, repo_url: str, event, chat_id: int):
+        """Обработка одного события для конкретного чата"""
         event_type = event.type
         payload = event.payload
 
@@ -151,8 +170,25 @@ class GitHubPoller:
                     "login": event.actor.login
                 }
 
-        logger.info(f"Processing event: {event_type} for {repo_url}")
-        logger.debug(f"Event payload keys: {list(payload.keys())}")
+        # Получаем автора и тип для фильтрации
+        author = get_author_from_event(event_type, payload)
+        filter_event_type = get_event_type_for_filter(event_type)
+
+        # Проверяем фильтры
+        filters = storage.get_filters(chat_id, repo_url)
+
+        if filters:
+            # Проверка типа события
+            event_types = filters.get("event_types", [])
+            if event_types and filter_event_type not in event_types:
+                logger.debug(f"Event type {filter_event_type} filtered out for chat {chat_id}")
+                return
+
+            # Проверка автора
+            excluded_authors = filters.get("excluded_authors", [])
+            if author and author in excluded_authors:
+                logger.debug(f"Author {author} filtered out for chat {chat_id}")
+                return
 
         # Форматируем событие
         text, event_key = self.format_event(event_type, payload)
@@ -161,54 +197,90 @@ class GitHubPoller:
             logger.warning(f"⚠️ No handler or empty text for event type: {event_type}")
             return
 
-        logger.info(f"✅ Formatted event text (preview): {text[:100]}...")
+        # Отправляем уведомление
+        if self.notification_func:
+            try:
+                await self.notification_func(
+                    chat_id=chat_id,
+                    text=text,
+                    event_key=event_key,
+                    edit_existing=False
+                )
+                logger.info(f"✅ Notification sent to chat {chat_id}")
+            except Exception as e:
+                logger.error(f"❌ Failed to send notification to {chat_id}: {e}", exc_info=True)
 
-        # Получаем подписанные чаты
-        chat_ids = storage.get_chats_for_repo(repo_url)
-
-        if not chat_ids:
-            logger.warning(f"⚠️ No subscribed chats for {repo_url}")
+    async def send_grouped_events(self, chat_id: int, repo_url: str, events: list):
+        """Отправка группы событий одним сообщением"""
+        if not events:
             return
 
-        logger.info(f"Found {len(chat_ids)} subscribed chats: {chat_ids}")
+        filtered_events = []
 
-        # Получаем автора и тип для фильтрации
-        author = get_author_from_event(event_type, payload)
-        filter_event_type = get_event_type_for_filter(event_type)
+        for event in events:
+            event_type = event.type
+            payload = event.payload
 
-        logger.info(f"Event type: {event_type} → filter type: {filter_event_type}, author: {author}")
+            # Добавляем информацию о репозитории
+            if "repository" not in payload:
+                payload["repository"] = {
+                    "html_url": repo_url,
+                    "full_name": f"{event.repo.name}"
+                }
 
-        # Отправляем уведомления
-        for chat_id in chat_ids:
+            # Добавляем sender/actor
+            if event.actor:
+                if "sender" not in payload:
+                    payload["sender"] = {"login": event.actor.login}
+                if "actor" not in payload:
+                    payload["actor"] = {"login": event.actor.login}
+
             # Проверяем фильтры
-            filters = storage.get_filters(chat_id, repo_url)
-            logger.info(f"Filters for chat {chat_id}: {filters}")
+            author = get_author_from_event(event_type, payload)
+            filter_event_type = get_event_type_for_filter(event_type)
 
+            filters = storage.get_filters(chat_id, repo_url)
             if filters:
-                # Проверка типа события
                 event_types = filters.get("event_types", [])
                 if event_types and filter_event_type not in event_types:
-                    logger.info(f"⚠️ Event type {filter_event_type} filtered out for chat {chat_id} (allowed: {event_types})")
                     continue
 
-                # Проверка автора
                 excluded_authors = filters.get("excluded_authors", [])
                 if author and author in excluded_authors:
-                    logger.info(f"⚠️ Author {author} filtered out for chat {chat_id}")
                     continue
 
-            # Отправляем уведомление
-            if self.notification_func:
-                try:
-                    await self.notification_func(
-                        chat_id=chat_id,
-                        text=text,
-                        event_key=event_key,
-                        edit_existing=False
-                    )
-                    logger.info(f"✅ Notification sent to chat {chat_id}")
-                except Exception as e:
-                    logger.error(f"❌ Failed to send notification to {chat_id}: {e}", exc_info=True)
+            # Форматируем событие
+            text, _ = self.format_event(event_type, payload)
+            if text:
+                filtered_events.append((event_type, text))
+
+        if not filtered_events:
+            logger.info(f"No events passed filters for chat {chat_id}")
+            return
+
+        # Формируем сгруппированное сообщение
+        repo_name = repo_url.replace("https://github.com/", "")
+        grouped_text = f"📦 <b>{repo_name}</b>\n"
+        grouped_text += f"<i>События за последнюю минуту ({len(filtered_events)})</i>\n\n"
+
+        for i, (event_type, text) in enumerate(filtered_events, 1):
+            # Убираем повторяющееся название репозитория из каждого события
+            text = text.replace(f"<b>{repo_name}</b>", "").replace(f"{repo_name}", "")
+            grouped_text += f"{'─' * 30}\n"
+            grouped_text += text + "\n\n"
+
+        # Отправляем
+        if self.notification_func:
+            try:
+                await self.notification_func(
+                    chat_id=chat_id,
+                    text=grouped_text,
+                    event_key=None,
+                    edit_existing=False
+                )
+                logger.info(f"✅ Grouped notification ({len(filtered_events)} events) sent to chat {chat_id}")
+            except Exception as e:
+                logger.error(f"❌ Failed to send grouped notification to {chat_id}: {e}", exc_info=True)
 
     def format_event(self, event_type: str, payload: dict) -> tuple[str, str]:
         """Форматирование события в текст сообщения"""

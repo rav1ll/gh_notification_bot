@@ -20,8 +20,15 @@ def format_push_event(payload: dict) -> tuple[str, str]:
 
     compare_url = payload.get("compare", "")
 
-    text = f"<b>Push в {repo_name}</b>\n"
-    text += f"Ветка: <code>{ref}</code>\n"
+    # Формируем ссылку на ветку
+    repo_html_url = repo.get("html_url", "")
+    branch_url = f"{repo_html_url}/tree/{ref}" if repo_html_url else ""
+
+    text = f"📤 <b>Push в {repo_name}</b>\n"
+    if branch_url:
+        text += f'Ветка: <a href="{branch_url}">{ref}</a>\n'
+    else:
+        text += f"Ветка: <code>{ref}</code>\n"
     text += f"Автор: {pusher}\n\n"
 
     if commits:
@@ -37,7 +44,7 @@ def format_push_event(payload: dict) -> tuple[str, str]:
             text += f"\n... и ещё {len(commits) - 10} коммитов\n"
 
     if compare_url:
-        text += f"\n<a href='{compare_url}'>Сравнить изменения</a>"
+        text += f'\n<a href="{compare_url}">Сравнить изменения</a>'
 
     # event_key для редактирования сообщений
     event_key = f"push:{repo_name}:{ref}"
@@ -89,7 +96,7 @@ def format_issues_event(payload: dict) -> tuple[str, str]:
         text += f"<blockquote>{body_preview}</blockquote>\n"
 
     if issue_url:
-        text += f"\n<a href='{issue_url}'>Открыть issue</a>"
+        text += f'\n<a href="{issue_url}">Открыть issue</a>'
 
     event_key = f"issue:{repo_name}:{issue_number}"
 
@@ -127,7 +134,8 @@ def format_issue_comment_event(payload: dict) -> tuple[str, str]:
             body_preview += "..."
         text += f"<blockquote>{body_preview}</blockquote>\n"
 
-    text += f"\n<a href='{comment_url}'>Открыть комментарий</a>"
+    if comment_url:
+        text += f'\n<a href="{comment_url}">Открыть комментарий</a>'
 
     event_key = f"issue_comment:{repo_name}:{comment.get('id')}"
 
@@ -180,7 +188,11 @@ def format_pull_request_event(payload: dict) -> tuple[str, str]:
     changed_files = pr.get("changed_files", 0)
     text += f"\n+{additions} / -{deletions} |  {changed_files} файлов\n"
 
-    text += f"\n<a href='{pr_url}'>Открыть Pull Request</a>"
+    # Добавляем ссылку на PR
+    if pr_url:
+        text += f'\n<a href="{pr_url}">Открыть Pull Request</a>'
+    else:
+        text += "\n(Ссылка на PR недоступна)"
 
     event_key = f"pr:{repo_name}:{pr_number}"
 
@@ -220,7 +232,8 @@ def format_pr_review_comment_event(payload: dict) -> tuple[str, str]:
             body_preview += "..."
         text += f"<blockquote>{body_preview}</blockquote>\n"
 
-    text += f"\n<a href='{comment_url}'>Открыть комментарий</a>"
+    if comment_url:
+        text += f'\n<a href="{comment_url}">Открыть комментарий</a>'
 
     event_key = f"pr_comment:{repo_name}:{comment.get('id')}"
 
@@ -266,7 +279,8 @@ def format_workflow_run_event(payload: dict) -> tuple[str, str]:
     text += f"{actor}\n\n"
     text += f"Статус: {status_text}\n"
 
-    text += f"\n<a href='{run_url}'>Открыть workflow</a>"
+    if run_url:
+        text += f'\n<a href="{run_url}">Открыть workflow</a>'
 
     event_key = f"workflow:{repo_name}:{workflow_run.get('id')}"
 
