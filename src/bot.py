@@ -122,7 +122,7 @@ async def button_filters(message: types.Message, state: FSMContext):
         repo_name = repo_url.replace("https://github.com/", "")
         keyboard.append([InlineKeyboardButton(
             text=repo_name,
-            callback_data=f"filter_repo:{repo_url}"
+            callback_data=f"filter_repo:{repo_name}"
         )])
 
     await state.set_state(FilterStates.waiting_for_repo_choice)
@@ -151,7 +151,7 @@ async def button_unsubscribe(message: types.Message, state: FSMContext):
         repo_name = repo_url.replace("https://github.com/", "")
         keyboard.append([InlineKeyboardButton(
             text=repo_name,
-            callback_data=f"unsub:{repo_url}"
+            callback_data=f"unsub:{repo_name}"
         )])
 
     await message.answer(
@@ -373,7 +373,7 @@ async def cmd_unsubscribe(message: types.Message):
         repo_name = repo_url.replace("https://github.com/", "")
         keyboard.append([InlineKeyboardButton(
             text=repo_name,
-            callback_data=f"unsub:{repo_url}"
+            callback_data=f"unsub:{repo_name}"
         )])
 
     await message.answer(
@@ -388,7 +388,8 @@ async def process_unsubscribe(callback: types.CallbackQuery):
     Обработка отписки
     """
 
-    repo_url = callback.data.replace("unsub:", "")
+    repo_name = callback.data.replace("unsub:", "")
+    repo_url = f"https://github.com/{repo_name}"
     chat_id = callback.message.chat.id
 
     sub = storage.get_subscription(chat_id, repo_url)
@@ -428,7 +429,7 @@ async def cmd_filters(message: types.Message, state: FSMContext):
         repo_name = repo_url.replace("https://github.com/", "")
         keyboard.append([InlineKeyboardButton(
             text=repo_name,
-            callback_data=f"filter_repo:{repo_url}"
+            callback_data=f"filter_repo:{repo_name}"
         )])
 
     await state.set_state(FilterStates.waiting_for_repo_choice)
@@ -444,7 +445,8 @@ async def process_filter_repo(callback: types.CallbackQuery, state: FSMContext):
     Выбор репозитория для применения фильтров
     """
 
-    repo_url = callback.data.replace("filter_repo:", "")
+    repo_name = callback.data.replace("filter_repo:", "")
+    repo_url = f"https://github.com/{repo_name}"
     await state.update_data(repo_url=repo_url)
 
     filters = storage.get_filters(callback.message.chat.id, repo_url)

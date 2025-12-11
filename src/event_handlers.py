@@ -1,4 +1,5 @@
 from typing import Optional
+import html
 
 
 def format_push_event(payload: dict) -> tuple[str, str]:
@@ -29,12 +30,14 @@ def format_push_event(payload: dict) -> tuple[str, str]:
     repo_html_url = repo.get("html_url", "")
     branch_url = f"{repo_html_url}/tree/{ref}" if repo_html_url else ""
 
-    text = f"📤 <b>Push в {repo_name}</b>\n"
+    text = f"📤 <b>Push в {html.escape(repo_name)}</b>\n"
     if branch_url:
-        text += f'Ветка: <a href="{branch_url}">{ref}</a>\n'
+        text += f'Ветка: <a href="{html.escape(branch_url)}">{html.escape(ref)}</a>\n'
     else:
-        text += f"Ветка: <code>{ref}</code>\n"
-    text += f"Автор: {pusher}\n\n"
+        text += f"Ветка: <code>{html.escape(ref)}</code>\n"
+    text += f"Автор: {html.escape(pusher)}\n\n"
+
+    commit_count = payload.get("size", len(commits))
 
     commit_count = payload.get("size", len(commits))
 
@@ -44,8 +47,8 @@ def format_push_event(payload: dict) -> tuple[str, str]:
             sha = commit.get("id", "")[:7]
             message = commit.get("message", "").split("\n")[0][:100]
             author = commit.get("author", {}).get("name", "Unknown")
-            text += f"<code>{sha}</code> {message}\n"
-            text += f"{author}\n"
+            text += f"<code>{html.escape(sha)}</code> {html.escape(message)}\n"
+            text += f"{html.escape(author)}\n"
 
         if len(commits) > 10:
             text += f"\n... и ещё {len(commits) - 10} коммитов\n"
@@ -92,21 +95,21 @@ def format_issues_event(payload: dict) -> tuple[str, str]:
         "edited": "Issue отредактирован"
     }
 
-    action_text = actions_map.get(action, f"Issue: {action}")
+    action_text = actions_map.get(action, f"Issue: {html.escape(action)}")
 
     text = f"{action_text}\n"
-    text += f"<b>{repo_name}</b>\n"
-    text += f"<b>#{issue_number}: {issue_title}</b>\n"
-    text += f"{sender}"
+    text += f"<b>{html.escape(repo_name)}</b>\n"
+    text += f"<b>#{issue_number}: {html.escape(issue_title)}</b>\n"
+    text += f"{html.escape(sender)}"
 
     if issue_body and action == "opened":
         body_preview = issue_body[:500]
         if len(issue_body) > 500:
             body_preview += "..."
-        text += f"\n\n<blockquote>{body_preview}</blockquote>"
+        text += f"\n\n<blockquote>{html.escape(body_preview)}</blockquote>"
 
     if issue_url:
-        text += f'\n<a href="{issue_url}">Открыть issue</a>'
+        text += f'\n<a href="{html.escape(issue_url)}">Открыть issue</a>'
 
     event_key = f"issue:{repo_name}:{issue_number}"
 
@@ -134,18 +137,18 @@ def format_issue_comment_event(payload: dict) -> tuple[str, str]:
     comment_url = comment.get("html_url", "")
 
     text = f"<b>Новый комментарий</b>\n"
-    text += f"{repo_name}\n"
-    text += f"<b>#{issue_number}: {issue_title}</b>\n"
-    text += f"{sender}"
+    text += f"{html.escape(repo_name)}\n"
+    text += f"<b>#{issue_number}: {html.escape(issue_title)}</b>\n"
+    text += f"{html.escape(sender)}"
 
     if comment_body:
         body_preview = comment_body[:500]
         if len(comment_body) > 500:
             body_preview += "..."
-        text += f"\n\n<blockquote>{body_preview}</blockquote>"
+        text += f"\n\n<blockquote>{html.escape(body_preview)}</blockquote>"
 
     if comment_url:
-        text += f'\n<a href="{comment_url}">Открыть комментарий</a>'
+        text += f'\n<a href="{html.escape(comment_url)}">Открыть комментарий</a>'
 
     event_key = f"issue_comment:{repo_name}:{comment.get('id')}"
 
@@ -179,19 +182,19 @@ def format_pull_request_event(payload: dict) -> tuple[str, str]:
         "synchronize": "PR обновлён"
     }
 
-    action_text = actions_map.get(action, f"PR: {action}")
+    action_text = actions_map.get(action, f"PR: {html.escape(action)}")
 
     text = f"{action_text}\n"
-    text += f"<b>{repo_name}</b>\n"
-    text += f"<b>#{pr_number}: {pr_title}</b>\n"
-    text += f"{sender}\n"
-    text += f"{head_branch} → {base_branch}"
+    text += f"<b>{html.escape(repo_name)}</b>\n"
+    text += f"<b>#{pr_number}: {html.escape(pr_title)}</b>\n"
+    text += f"{html.escape(sender)}\n"
+    text += f"{html.escape(head_branch)} → {html.escape(base_branch)}"
 
     if pr_body and action == "opened":
         body_preview = pr_body[:500]
         if len(pr_body) > 500:
             body_preview += "..."
-        text += f"\n\n<blockquote>{body_preview}</blockquote>"
+        text += f"\n\n<blockquote>{html.escape(body_preview)}</blockquote>"
 
     additions = pr.get("additions", 0)
     deletions = pr.get("deletions", 0)
@@ -200,7 +203,7 @@ def format_pull_request_event(payload: dict) -> tuple[str, str]:
 
     # Добавляем ссылку на PR, если доступна
     if pr_url:
-        text += f'\n<a href="{pr_url}">Открыть Pull Request</a>'
+        text += f'\n<a href="{html.escape(pr_url)}">Открыть Pull Request</a>'
 
     event_key = f"pr:{repo_name}:{pr_number}"
 
@@ -229,19 +232,19 @@ def format_pr_review_comment_event(payload: dict) -> tuple[str, str]:
     path = comment.get("path", "unknown file")
 
     text = f"<b>Комментарий к коду в PR</b>\n"
-    text += f"{repo_name}\n"
-    text += f"<b>#{pr_number}: {pr_title}</b>\n"
-    text += f"{sender}\n"
-    text += f"{path}"
+    text += f"{html.escape(repo_name)}\n"
+    text += f"<b>#{pr_number}: {html.escape(pr_title)}</b>\n"
+    text += f"{html.escape(sender)}\n"
+    text += f"{html.escape(path)}"
 
     if comment_body:
         body_preview = comment_body[:500]
         if len(comment_body) > 500:
             body_preview += "..."
-        text += f"\n\n<blockquote>{body_preview}</blockquote>"
+        text += f"\n\n<blockquote>{html.escape(body_preview)}</blockquote>"
 
     if comment_url:
-        text += f'\n<a href="{comment_url}">Открыть комментарий</a>'
+        text += f'\n<a href="{html.escape(comment_url)}">Открыть комментарий</a>'
 
     event_key = f"pr_comment:{repo_name}:{comment.get('id')}"
 
@@ -276,21 +279,68 @@ def format_workflow_run_event(payload: dict) -> tuple[str, str]:
     }
 
     if action == "completed":
-        status_text = status_map.get(conclusion, conclusion)
+        status_text = status_map.get(conclusion, html.escape(conclusion))
     else:
-        status_text = status_map.get(status, status)
+        status_text = status_map.get(status, html.escape(status))
 
     text = f"⚙<b>GitHub Actions</b>\n"
-    text += f"{repo_name}\n"
-    text += f"<b>{workflow_name}</b> #{run_number}\n"
-    text += f"Ветка: {branch}\n"
-    text += f"{actor}\n"
+    text += f"{html.escape(repo_name)}\n"
+    text += f"<b>{html.escape(workflow_name)}</b> #{run_number}\n"
+    text += f"Ветка: {html.escape(branch)}\n"
+    text += f"{html.escape(actor)}\n"
     text += f"Статус: {status_text}"
 
     if run_url:
-        text += f'\n<a href="{run_url}">Открыть workflow</a>'
+        text += f'\n<a href="{html.escape(run_url)}">Открыть workflow</a>'
 
     event_key = f"workflow:{repo_name}:{workflow_run.get('id')}"
+
+    return text, event_key
+
+
+def format_create_event(payload: dict) -> tuple[str, str]:
+    """
+    Форматирование события создания ветки/тега
+    """
+
+    ref_type = payload.get("ref_type", "unknown")
+    ref = payload.get("ref", "unknown")
+    repo = payload.get("repository", {})
+    repo_name = repo.get("full_name", "Unknown")
+    repo_html_url = repo.get("html_url", "")
+
+    # Безопасное получение sender
+    sender = None
+    if "sender" in payload and payload["sender"]:
+        sender = payload["sender"].get("login")
+    if not sender and "actor" in payload and payload["actor"]:
+        sender = payload["actor"].get("login")
+    sender = sender or "Unknown"
+
+    if ref_type == "branch":
+        emoji = "➕"
+        type_text = "Создана новая ветка"
+        ref_url = f"{repo_html_url}/tree/{ref}" if repo_html_url else ""
+    elif ref_type == "tag":
+        emoji = "➕"
+        type_text = "Создан новый тег"
+        ref_url = f"{repo_html_url}/releases/tag/{ref}" if repo_html_url else ""
+    else:
+        emoji = "➕"
+        type_text = f"Создан {ref_type}"
+        ref_url = ""
+
+    text = f"{emoji} <b>{type_text}</b>\n"
+    text += f"<b>{html.escape(repo_name)}</b>\n"
+
+    if ref_url:
+        text += f'<a href="{html.escape(ref_url)}">{html.escape(ref)}</a>\n'
+    else:
+        text += f"<code>{html.escape(ref)}</code>\n"
+
+    text += f"{html.escape(sender)}"
+
+    event_key = f"create:{repo_name}:{ref}"
 
     return text, event_key
 
@@ -306,7 +356,8 @@ def get_event_handler(event_type: str):
         "issue_comment": format_issue_comment_event,
         "pull_request": format_pull_request_event,
         "pull_request_review_comment": format_pr_review_comment_event,
-        "workflow_run": format_workflow_run_event
+        "workflow_run": format_workflow_run_event,
+        "CreateEvent": format_create_event
     }
     return handlers.get(event_type)
 
