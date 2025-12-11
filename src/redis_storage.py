@@ -31,7 +31,8 @@ class RedisStorage:
             "webhook_id": webhook_id,
             "filters": {
                 "excluded_authors": [],
-                "event_types": ["push", "issues", "pull_request", "workflow_run"]
+                "event_types": ["push", "issues", "pull_request", "workflow_run"],
+                "group_events": False  # По умолчанию - отдельные сообщения
             }
         }
         return self.client.hset(key, repo_url, json.dumps(data))
@@ -199,6 +200,28 @@ class RedisStorage:
 
         key = f"last_event:{repo_url}"
         return self.client.get(key)
+
+    def set_group_events(self, chat_id: int, repo_url: str, group_events: bool) -> bool:
+        """
+        Установить режим группировки событий
+        """
+
+        sub = self.get_subscription(chat_id, repo_url)
+        if sub:
+            sub["filters"]["group_events"] = group_events
+            key = f"subscriptions:{chat_id}"
+            return self.client.hset(key, repo_url, json.dumps(sub))
+        return False
+
+    def get_group_events(self, chat_id: int, repo_url: str) -> bool:
+        """
+        Получить настройку группировки событий
+        """
+
+        filters = self.get_filters(chat_id, repo_url)
+        if filters:
+            return filters.get("group_events", False)
+        return False
 
 
 storage = RedisStorage()

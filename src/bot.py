@@ -429,20 +429,25 @@ async def process_filter_repo(callback: types.CallbackQuery, state: FSMContext):
     repo_url = callback.data.replace("filter_repo:", "")
     await state.update_data(repo_url=repo_url)
 
+    filters = storage.get_filters(callback.message.chat.id, repo_url)
+    group_events = filters.get('group_events', False) if filters else False
+    group_status = "✅ ВКЛ" if group_events else "❌ ВЫКЛ"
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Исключить автора", callback_data="filter:add_author")],
         [InlineKeyboardButton(text="Удалить из исключений", callback_data="filter:remove_author")],
         [InlineKeyboardButton(text="Типы событий", callback_data="filter:events")],
+        [InlineKeyboardButton(text=f"Группировка: {group_status}", callback_data="filter:toggle_group")],
         [InlineKeyboardButton(text="Отмена", callback_data="filter:cancel")]
     ])
 
-    filters = storage.get_filters(callback.message.chat.id, repo_url)
     text = f"<b>Фильтры для {repo_url.replace('https://github.com/', '')}</b>\n\n"
     if filters:
         excluded = filters.get('excluded_authors', [])
         events = filters.get('event_types', [])
         text += f"Исключённые авторы: {', '.join(excluded) if excluded else 'не выбрано'}\n"
-        text += f"Типы событий: {', '.join(events) if events else 'все'}"
+        text += f"Типы событий: {', '.join(events) if events else 'все'}\n"
+        text += f"Группировка событий: {'включена' if group_events else 'выключена'}"
     else:
         text += "Фильтры не настроены"
 
@@ -613,6 +618,48 @@ async def save_events(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text(f"Типы событий сохранены: {', '.join(selected)}")
     await state.clear()
     await callback.answer()
+
+
+@dp.callback_query(F.data == "filter:toggle_group")
+async def filter_toggle_group(callback: types.CallbackQuery, state: FSMContext):
+    """
+    Переключение группировки событий
+    """
+
+    data = await state.get_data()
+    repo_url = data.get("repo_url")
+
+    # Получаем текущее состояние
+    filters = storage.get_filters(callback.message.chat.id, repo_url)
+    current_group = filters.get('group_events', False) if filters else False
+
+    # Переключаем
+    new_group = not current_group
+    storage.set_group_events(callback.message.chat.id, repo_url, new_group)
+
+    # Обновляем кнопку
+    group_status = "✅ ВКЛ" if new_group else "❌ ВЫКЛ"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Исключить автора", callback_data="filter:add_author")],
+        [InlineKeyboardButton(text="Удалить из исключений", callback_data="filter:remove_author")],
+        [InlineKeyboardButton(text="Типы событий", callback_data="filter:events")],
+        [InlineKeyboardButton(text=f"Группировка: {group_status}", callback_data="filter:toggle_group")],
+        [InlineKeyboardButton(text="Отмена", callback_data="filter:cancel")]
+    ])
+
+    # Обновляем текст
+    filters = storage.get_filters(callback.message.chat.id, repo_url)
+    text = f"<b>Фильтры для {repo_url.replace('https://github.com/', '')}</b>\n\n"
+    if filters:
+        excluded = filters.get('excluded_authors', [])
+        events = filters.get('event_types', [])
+        text += f"Исключённые авторы: {', '.join(excluded) if excluded else 'не выбрано'}\n"
+        text += f"Типы событий: {', '.join(events) if events else 'все'}\n"
+        text += f"Группировка событий: {'включена ✅' if new_group else 'выключена ❌'}"
+
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
+    await callback.answer(f"Группировка {'включена' if new_group else 'выключена'}")
 
 
 @dp.callback_query(F.data == "filter:cancel")
