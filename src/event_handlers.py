@@ -39,6 +39,8 @@ def format_push_event(payload: dict) -> tuple[str, str]:
 
     commit_count = payload.get("size", len(commits))
 
+    commit_count = payload.get("size", len(commits))
+
     if commits:
         text += f"<b>Коммиты ({len(commits)}):</b>\n"
         for commit in commits[:10]:  # выводим 10 коммитов

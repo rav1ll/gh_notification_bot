@@ -168,24 +168,33 @@ async def button_help(message: types.Message, state: FSMContext):
     await state.clear()  # Сбрасываем предыдущее состояние
 
     text = """
-    <b>Как использовать бота:</b>
+<b>Как использовать бота:</b>
 
-    1️⃣ <b>Подписка на репозиторий</b>
-       /subscribe - введите ссылку на репозиторий
-       Пример: https://github.com/owner/repo
+1️⃣ <b>Подписка на репозиторий</b>
+   📝 Подписаться - введите ссылку на репозиторий
+   Пример: https://github.com/owner/repo
 
-    2️⃣ <b>Настройка фильтров</b>
-       /filters - выбрать репозиторий - настроить:
-       • Исключить авторов (например, dependabot)
-       • Выбрать типы событий
+2️⃣ <b>Настройка фильтров</b>
+   ⚙️ Фильтры - выбрать репозиторий - настроить:
+   • Исключить авторов (например, dependabot[bot])
+   • Выбрать типы событий (push, issues, pull_request, workflow_run)
+   • Группировать сообщения (ВКЛ/ВЫКЛ)
 
-    3️⃣ <b>Отписка</b>
-       /unsubscribe - выбрать репозиторий
+3️⃣ <b>Просмотр подписок</b>
+   📋 Мои подписки - список активных подписок с фильтрами
 
-    <b>Формат уведомлений:</b>
-    • Push: список коммитов с авторами
-    • Issues/PR: текст с комментарием
-    • Actions: статус выполнения workflow
+4️⃣ <b>Отписка</b>
+   ❌ Отписаться - выбрать репозиторий
+
+<b>Группировка событий:</b>
+• ВЫКЛ (по умолчанию) - каждое событие отдельным сообщением
+• ВКЛ - все события за минуту в одном сообщении
+
+<b>Формат уведомлений:</b>
+• Push: список коммитов с авторами и ссылками
+• Issues: создание, закрытие, комментарии
+• Pull Requests: создание, merge, комментарии к коду
+• Actions: статус выполнения workflow
     """
     await message.answer(text, parse_mode="HTML")
 
@@ -220,24 +229,33 @@ async def cmd_help(message: types.Message):
     """
 
     text = """
-    <b>Как использовать бота:</b>
-    
-    1️⃣ <b>Подписка на репозиторий</b>
-       /subscribe - введите ссылку на репозиторий
-       Пример: https://github.com/owner/repo
-    
-    2️⃣ <b>Настройка фильтров</b>
-       /filters - выбрать репозиторий - настроить:
-       • Исключить авторов (например, dependabot)
-       • Выбрать типы событий
-    
-    3️⃣ <b>Отписка</b>
-       /unsubscribe - выбрать репозиторий
-    
-    <b>Формат уведомлений:</b>
-    • Push: список коммитов с авторами
-    • Issues/PR: текст с комментарием
-    • Actions: статус выполнения workflow
+<b>Как использовать бота:</b>
+
+1️⃣ <b>Подписка на репозиторий</b>
+   📝 Подписаться - введите ссылку на репозиторий
+   Пример: https://github.com/owner/repo
+
+2️⃣ <b>Настройка фильтров</b>
+   ⚙️ Фильтры - выбрать репозиторий - настроить:
+   • Исключить авторов (например, dependabot[bot])
+   • Выбрать типы событий (push, issues, pull_request, workflow_run)
+   • Группировать сообщения (ВКЛ/ВЫКЛ)
+
+3️⃣ <b>Просмотр подписок</b>
+   📋 Мои подписки - список активных подписок с фильтрами
+
+4️⃣ <b>Отписка</b>
+   ❌ Отписаться - выбрать репозиторий
+
+<b>Группировка событий:</b>
+• ВЫКЛ (по умолчанию) - каждое событие отдельным сообщением
+• ВКЛ - все события за минуту в одном сообщении
+
+<b>Формат уведомлений:</b>
+• Push: список коммитов с авторами и ссылками
+• Issues: создание, закрытие, комментарии
+• Pull Requests: создание, merge, комментарии к коду
+• Actions: статус выполнения workflow
     """
     await message.answer(text, parse_mode="HTML")
 
@@ -298,7 +316,7 @@ async def process_repo_url(message: types.Message, state: FSMContext):
         f"<b>{repo_info['full_name']}</b>\n"
         f"{repo_info['description'] or 'Без описания'}\n"
         f"{repo_info['stars']} stars\n\n"
-        f"Бот будет проверять новые события каждую минуту.\n"
+        f"Бот будет проверять новые события каждые 30 секунд.\n"
         f"Используйте кнопку <b> Фильтры</b> для настройки фильтров",
         parse_mode="HTML",
         reply_markup=get_main_keyboard()
@@ -431,20 +449,25 @@ async def process_filter_repo(callback: types.CallbackQuery, state: FSMContext):
     repo_url = f"https://github.com/{repo_name}"
     await state.update_data(repo_url=repo_url)
 
+    filters = storage.get_filters(callback.message.chat.id, repo_url)
+    group_events = filters.get('group_events', False) if filters else False
+    group_status = "✅ ВКЛ" if group_events else "❌ ВЫКЛ"
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Исключить автора", callback_data="filter:add_author")],
         [InlineKeyboardButton(text="Удалить из исключений", callback_data="filter:remove_author")],
         [InlineKeyboardButton(text="Типы событий", callback_data="filter:events")],
+        [InlineKeyboardButton(text=f"Группировать сообщения: {group_status}", callback_data="filter:toggle_group")],
         [InlineKeyboardButton(text="Отмена", callback_data="filter:cancel")]
     ])
 
-    filters = storage.get_filters(callback.message.chat.id, repo_url)
     text = f"<b>Фильтры для {repo_url.replace('https://github.com/', '')}</b>\n\n"
     if filters:
         excluded = filters.get('excluded_authors', [])
         events = filters.get('event_types', [])
         text += f"Исключённые авторы: {', '.join(excluded) if excluded else 'не выбрано'}\n"
-        text += f"Типы событий: {', '.join(events) if events else 'все'}"
+        text += f"Типы событий: {', '.join(events) if events else 'все'}\n"
+        text += f"Группировать сообщения: {'включено' if group_events else 'выключено'}"
     else:
         text += "Фильтры не настроены"
 
@@ -615,6 +638,48 @@ async def save_events(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text(f"Типы событий сохранены: {', '.join(selected)}")
     await state.clear()
     await callback.answer()
+
+
+@dp.callback_query(F.data == "filter:toggle_group")
+async def filter_toggle_group(callback: types.CallbackQuery, state: FSMContext):
+    """
+    Переключение группировки событий
+    """
+
+    data = await state.get_data()
+    repo_url = data.get("repo_url")
+
+    # Получаем текущее состояние
+    filters = storage.get_filters(callback.message.chat.id, repo_url)
+    current_group = filters.get('group_events', False) if filters else False
+
+    # Переключаем
+    new_group = not current_group
+    storage.set_group_events(callback.message.chat.id, repo_url, new_group)
+
+    # Обновляем кнопку
+    group_status = "✅ ВКЛ" if new_group else "❌ ВЫКЛ"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Исключить автора", callback_data="filter:add_author")],
+        [InlineKeyboardButton(text="Удалить из исключений", callback_data="filter:remove_author")],
+        [InlineKeyboardButton(text="Типы событий", callback_data="filter:events")],
+        [InlineKeyboardButton(text=f"Группировать сообщения: {group_status}", callback_data="filter:toggle_group")],
+        [InlineKeyboardButton(text="Отмена", callback_data="filter:cancel")]
+    ])
+
+    # Обновляем текст
+    filters = storage.get_filters(callback.message.chat.id, repo_url)
+    text = f"<b>Фильтры для {repo_url.replace('https://github.com/', '')}</b>\n\n"
+    if filters:
+        excluded = filters.get('excluded_authors', [])
+        events = filters.get('event_types', [])
+        text += f"Исключённые авторы: {', '.join(excluded) if excluded else 'не выбрано'}\n"
+        text += f"Типы событий: {', '.join(events) if events else 'все'}\n"
+        text += f"Группировать сообщения: {'включено ✅' if new_group else 'выключено ❌'}"
+
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
+    await callback.answer(f"Группировка сообщений {'включена' if new_group else 'выключена'}")
 
 
 @dp.callback_query(F.data == "filter:cancel")
