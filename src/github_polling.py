@@ -261,7 +261,7 @@ class GitHubPoller:
         # Формируем сгруппированное сообщение
         repo_name = repo_url.replace("https://github.com/", "")
         grouped_text = f"📦 <b>{repo_name}</b>\n"
-        grouped_text += f"<i>События за последнюю минуту ({len(filtered_events)})</i>\n\n"
+        grouped_text += f"<i>Новые события ({len(filtered_events)})</i>\n\n"
 
         for i, (event_type, text) in enumerate(filtered_events, 1):
             # Убираем повторяющееся название репозитория из каждого события

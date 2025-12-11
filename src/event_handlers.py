@@ -188,11 +188,9 @@ def format_pull_request_event(payload: dict) -> tuple[str, str]:
     changed_files = pr.get("changed_files", 0)
     text += f"\n+{additions} / -{deletions} |  {changed_files} файлов\n"
 
-    # Добавляем ссылку на PR
+    # Добавляем ссылку на PR, если доступна
     if pr_url:
         text += f'\n<a href="{pr_url}">Открыть Pull Request</a>'
-    else:
-        text += "\n(Ссылка на PR недоступна)"
 
     event_key = f"pr:{repo_name}:{pr_number}"
 
