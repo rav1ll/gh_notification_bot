@@ -85,15 +85,15 @@ def format_issues_event(payload: dict) -> tuple[str, str]:
     action_text = actions_map.get(action, f"Issue: {action}")
 
     text = f"{action_text}\n"
-    text += f"<b>{repo_name}</b>\n\n"
+    text += f"<b>{repo_name}</b>\n"
     text += f"<b>#{issue_number}: {issue_title}</b>\n"
-    text += f"{sender}\n\n"
+    text += f"{sender}"
 
     if issue_body and action == "opened":
         body_preview = issue_body[:500]
         if len(issue_body) > 500:
             body_preview += "..."
-        text += f"<blockquote>{body_preview}</blockquote>\n"
+        text += f"\n\n<blockquote>{body_preview}</blockquote>"
 
     if issue_url:
         text += f'\n<a href="{issue_url}">Открыть issue</a>'
@@ -124,15 +124,15 @@ def format_issue_comment_event(payload: dict) -> tuple[str, str]:
     comment_url = comment.get("html_url", "")
 
     text = f"<b>Новый комментарий</b>\n"
-    text += f"{repo_name}\n\n"
+    text += f"{repo_name}\n"
     text += f"<b>#{issue_number}: {issue_title}</b>\n"
-    text += f"{sender}\n\n"
+    text += f"{sender}"
 
     if comment_body:
         body_preview = comment_body[:500]
         if len(comment_body) > 500:
             body_preview += "..."
-        text += f"<blockquote>{body_preview}</blockquote>\n"
+        text += f"\n\n<blockquote>{body_preview}</blockquote>"
 
     if comment_url:
         text += f'\n<a href="{comment_url}">Открыть комментарий</a>'
@@ -172,21 +172,21 @@ def format_pull_request_event(payload: dict) -> tuple[str, str]:
     action_text = actions_map.get(action, f"PR: {action}")
 
     text = f"{action_text}\n"
-    text += f"<b>{repo_name}</b>\n\n"
+    text += f"<b>{repo_name}</b>\n"
     text += f"<b>#{pr_number}: {pr_title}</b>\n"
     text += f"{sender}\n"
-    text += f"{head_branch} → {base_branch}\n\n"
+    text += f"{head_branch} → {base_branch}"
 
     if pr_body and action == "opened":
         body_preview = pr_body[:500]
         if len(pr_body) > 500:
             body_preview += "..."
-        text += f"<blockquote>{body_preview}</blockquote>\n"
+        text += f"\n\n<blockquote>{body_preview}</blockquote>"
 
     additions = pr.get("additions", 0)
     deletions = pr.get("deletions", 0)
     changed_files = pr.get("changed_files", 0)
-    text += f"\n+{additions} / -{deletions} |  {changed_files} файлов\n"
+    text += f"\n+{additions} / -{deletions} | {changed_files} файлов"
 
     # Добавляем ссылку на PR, если доступна
     if pr_url:
@@ -219,16 +219,16 @@ def format_pr_review_comment_event(payload: dict) -> tuple[str, str]:
     path = comment.get("path", "")
 
     text = f"<b>Комментарий к коду в PR</b>\n"
-    text += f"{repo_name}\n\n"
+    text += f"{repo_name}\n"
     text += f"<b>#{pr_number}: {pr_title}</b>\n"
     text += f"{sender}\n"
-    text += f"{path}\n\n"
+    text += f"{path}"
 
     if comment_body:
         body_preview = comment_body[:500]
         if len(comment_body) > 500:
             body_preview += "..."
-        text += f"<blockquote>{body_preview}</blockquote>\n"
+        text += f"\n\n<blockquote>{body_preview}</blockquote>"
 
     if comment_url:
         text += f'\n<a href="{comment_url}">Открыть комментарий</a>'
@@ -271,11 +271,11 @@ def format_workflow_run_event(payload: dict) -> tuple[str, str]:
         status_text = status_map.get(status, status)
 
     text = f"⚙<b>GitHub Actions</b>\n"
-    text += f"{repo_name}\n\n"
+    text += f"{repo_name}\n"
     text += f"<b>{workflow_name}</b> #{run_number}\n"
     text += f"Ветка: {branch}\n"
-    text += f"{actor}\n\n"
-    text += f"Статус: {status_text}\n"
+    text += f"{actor}\n"
+    text += f"Статус: {status_text}"
 
     if run_url:
         text += f'\n<a href="{run_url}">Открыть workflow</a>'
