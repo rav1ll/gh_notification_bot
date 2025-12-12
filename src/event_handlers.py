@@ -173,14 +173,16 @@ def format_pull_request_event(payload: dict) -> tuple[str, str]:
     pr = payload.get("pull_request", {})
     repo = payload.get("repository", {})
     repo_name = repo.get("full_name", "Unknown")
+    repo_html_url = repo.get("html_url", "")
     sender = payload.get("sender", {}).get("login", "Unknown")
 
     pr_number = pr.get("number")
-    pr_title = pr.get("title", "") or "Без названия"
+    pr_title = pr.get("title") or "Без названия"
     pr_url = pr.get("html_url", "")
-    pr_body = pr.get("body", "") or ""
+    pr_body = pr.get("body") or ""
     base_branch = pr.get("base", {}).get("ref", "unknown")
     head_branch = pr.get("head", {}).get("ref", "unknown")
+    commits_count = pr.get("commits", 0)
 
     actions_map = {
         "opened": "Создан новый PR",
@@ -197,20 +199,46 @@ def format_pull_request_event(payload: dict) -> tuple[str, str]:
     text += f"<b>{html.escape(repo_name)}</b>\n"
     text += f"<b>#{pr_number}: {html.escape(pr_title)}</b>\n"
     text += f"{html.escape(sender)}\n"
-    text += f"{html.escape(head_branch)} → {html.escape(base_branch)}"
+    text += f"{html.escape(head_branch)} → {html.escape(base_branch)}\n"
 
-    if pr_body and action == "opened":
+    # Статистика изменений
+    additions = pr.get("additions")
+    deletions = pr.get("deletions")
+    changed_files = pr.get("changed_files")
+
+    if additions is not None and deletions is not None and changed_files is not None:
+        text += f"+{additions} / -{deletions} | {changed_files} файл(ов)\n"
+
+    # Список коммитов (если есть)
+    commits_list = pr.get("commits_list", [])
+    if commits_list:
+        text += f"\n<b>Коммиты ({len(commits_list)}):</b>\n"
+        for commit in commits_list[:10]:
+            sha = commit.get("sha", "")[:7]
+            message = commit.get("message", "").split("\n")[0][:100]
+            author = commit.get("author", {}).get("name", "Unknown")
+            commit_url = commit.get("html_url", "")
+
+            if commit_url:
+                text += f'• <a href="{html.escape(commit_url)}">{html.escape(sha)}</a> {html.escape(message)}\n'
+            else:
+                text += f"• <code>{html.escape(sha)}</code> {html.escape(message)}\n"
+            text += f"  {html.escape(author)}\n"
+
+        if len(commits_list) > 10:
+            text += f"... и ещё {len(commits_list) - 10} коммитов\n"
+    elif commits_count > 0:
+        # Если коммитов нет, но есть количество
+        text += f"Коммитов: {commits_count}\n"
+
+    # Описание PR
+    if pr_body:
         body_preview = pr_body[:500]
         if len(pr_body) > 500:
             body_preview += "..."
-        text += f"\n\n<blockquote>{html.escape(body_preview)}</blockquote>"
+        text += f"\n<blockquote>{html.escape(body_preview)}</blockquote>\n"
 
-    additions = pr.get("additions", 0)
-    deletions = pr.get("deletions", 0)
-    changed_files = pr.get("changed_files", 0)
-    text += f"\n+{additions} / -{deletions} | {changed_files} файлов"
-
-    # Добавляем ссылку на PR, если доступна
+    # Ссылка на PR
     if pr_url:
         text += f'\n<a href="{html.escape(pr_url)}">Открыть Pull Request</a>'
 

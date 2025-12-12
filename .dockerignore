@@ -9,41 +9,47 @@ __pycache__
 *$py.class
 *.so
 .Python
-*.egg-info
+*.egg-info/
 dist/
 build/
-*.egg
-
-# Virtual environments
 .venv/
 venv/
 env/
-ENV/
+
+# Poetry (=5 =C6=> 28@BC0;L=>5 >:@C65=85 2 >1@075)
+.venv
+poetry.toml
 
 # IDE
-.vscode/
-.idea/
+.idea
+.vscode
 *.swp
 *.swo
 *~
 
-# Docker
-Dockerfile
-.dockerignore
-docker-compose.yml
-
-# Environment files
-.env
-.env.local
-
-# Logs
-logs/
-*.log
+# Tests
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Documentation
-../README.md
-../ИНСТРУКЦИЯ.md
+*.md
+!README.md
+docs/
 
-# OS
+# Environment
+.env
+.envrc
+
+# CI/CD
+.github/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Misc
+*.log
 .DS_Store
-Thumbs.db

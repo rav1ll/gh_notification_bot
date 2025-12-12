@@ -71,6 +71,24 @@ async def handle_github_webhook(request: web.Request) -> web.Response:
         logger.info("Received ping event - webhook is configured correctly!")
         return web.Response(text="pong")
 
+    # Обогащение PR коммитами
+    if event_type == "pull_request" and payload.get("action") in ["opened", "synchronize"]:
+        try:
+            from github_api import github_api
+            pr = payload.get("pull_request", {})
+            pr_number = pr.get("number")
+            repo = payload.get("repository", {})
+            full_name = repo.get("full_name", "")
+
+            if pr_number and full_name and "/" in full_name:
+                owner, repo_name = full_name.split("/", 1)
+                commits = github_api.get_pr_commits(owner, repo_name, pr_number)
+                if commits:
+                    payload["pull_request"]["commits_list"] = commits
+                    logger.info(f"Enriched PR #{pr_number} with {len(commits)} commits")
+        except Exception as e:
+            logger.warning(f"Failed to enrich PR with commits: {e}")
+
     # получение обработчика события
     handler = get_event_handler(event_type)
     if not handler:
