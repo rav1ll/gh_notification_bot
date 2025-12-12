@@ -61,7 +61,7 @@ class GitHubAPI:
                     "secret": Config.WEBHOOK_SECRET
                 },
                 events=["push", "issues", "issue_comment", "pull_request",
-                        "pull_request_review_comment", "workflow_run"],
+                        "pull_request_review_comment", "workflow_run", "create"],
                 active=True
             )
             return hook.id

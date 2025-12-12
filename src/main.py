@@ -6,7 +6,6 @@ from pathlib import Path
 
 from bot import bot, dp, send_notification
 from webhook_server import start_webhook_server
-from github_polling import GitHubPoller
 
 # Создаём папку для логов
 log_dir = Path("logs")
@@ -29,29 +28,21 @@ async def main():
     Main обработчик бота и webhook сервера
     """
 
-    logger.info("Starting GitHub Telegram Notification Bot...")
+    logger.info("Starting GitHub Telegram Notification Bot (Webhook mode)...")
 
-    # запуск webhook сервер (для будущего использования)
+    # Запуск webhook сервера для приёма событий от GitHub
     webhook_runner = await start_webhook_server(notification_func=send_notification)
+    logger.info("Webhook server started - waiting for GitHub events")
 
-    # запуск GitHub polling (опрос событий)
-    poller = GitHubPoller(notification_func=send_notification, poll_interval=30)
-    polling_task = asyncio.create_task(poller.start())
-    logger.info("GitHub polling task created")
-
-    # запуск telegram бота
+    # Запуск telegram бота
     try:
         logger.info("Starting Telegram bot polling...")
         await dp.start_polling(bot)
     except Exception as e:
         logger.error(f"Error: {e}")
     finally:
-        # остановка polling
-        logger.info("Stopping GitHub polling...")
-        await poller.stop()
-        polling_task.cancel()
-
-        # очистка после запуска
+        # Очистка ресурсов
+        logger.info("Shutting down...")
         await webhook_runner.cleanup()
         await bot.session.close()
 

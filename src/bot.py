@@ -307,16 +307,35 @@ async def process_repo_url(message: types.Message, state: FSMContext):
 
     # сохранение подписки
     await message.answer("Настройка подписки...")
-    storage.add_subscription(chat_id, repo_url, webhook_id=None)
+
+    # Пытаемся создать webhook (обязательно для работы бота!)
+    webhook_id = None
+    webhook_status = ""
+    try:
+        from config import Config
+        if Config.WEBHOOK_HOST and Config.WEBHOOK_HOST != "http://localhost":
+            webhook_id = github_api.create_webhook(owner, repo_name)
+            if webhook_id:
+                webhook_status = "\n🔗 Webhook настроен (мгновенные уведомления)"
+                logger.info(f"Webhook created: id={webhook_id} for {repo_url}")
+            else:
+                webhook_status = "\n❌ Не удалось создать webhook! Проверьте права токена (admin:repo_hook)"
+        else:
+            webhook_status = "\n⚠️ WEBHOOK_HOST не настроен! Настройте ngrok для получения уведомлений"
+    except Exception as e:
+        logger.warning(f"Failed to create webhook: {e}")
+        webhook_status = "\n❌ Ошибка создания webhook. Проверьте настройки WEBHOOK_HOST"
+
+    storage.add_subscription(chat_id, repo_url, webhook_id=webhook_id)
     storage.add_repo_chat_mapping(repo_url, chat_id)
-    logger.info(f"Subscription created: chat_id={chat_id}, repo={repo_url}")
+    logger.info(f"Subscription created: chat_id={chat_id}, repo={repo_url}, webhook_id={webhook_id}")
 
     await message.answer(
         f"✅ <b>Подписка оформлена!</b>\n\n"
         f"<b>{repo_info['full_name']}</b>\n"
         f"{repo_info['description'] or 'Без описания'}\n"
-        f"{repo_info['stars']} stars\n\n"
-        f"Бот будет проверять новые события каждые 30 секунд.\n"
+        f"{repo_info['stars']} stars"
+        f"{webhook_status}\n\n"
         f"Используйте кнопку <b> Фильтры</b> для настройки фильтров",
         parse_mode="HTML",
         reply_markup=get_main_keyboard()
