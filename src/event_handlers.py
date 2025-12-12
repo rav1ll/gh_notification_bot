@@ -39,16 +39,25 @@ def format_push_event(payload: dict) -> tuple[str, str]:
 
     commit_count = payload.get("size", len(commits))
 
-    commit_count = payload.get("size", len(commits))
-
     if commits:
         text += f"<b>Коммиты ({len(commits)}):</b>\n"
         for commit in commits[:10]:  # выводим 10 коммитов
-            sha = commit.get("id", "")[:7]
+            sha = commit.get("sha") or commit.get("id", "")
+            sha_short = sha[:7] if sha else "unknown"
             message = commit.get("message", "").split("\n")[0][:100]
             author = commit.get("author", {}).get("name", "Unknown")
-            text += f"<code>{html.escape(sha)}</code> {html.escape(message)}\n"
-            text += f"{html.escape(author)}\n"
+
+            # Формируем ссылку на коммит
+            commit_url = commit.get("url", "")
+            if not commit_url and repo_html_url and sha:
+                commit_url = f"{repo_html_url}/commit/{sha}"
+
+            if commit_url:
+                text += f'• <a href="{html.escape(commit_url)}">{html.escape(sha_short)}</a> {html.escape(message)}\n'
+            else:
+                text += f"• <code>{html.escape(sha_short)}</code> {html.escape(message)}\n"
+
+            text += f"  {html.escape(author)}\n"
 
         if len(commits) > 10:
             text += f"\n... и ещё {len(commits) - 10} коммитов\n"
@@ -57,7 +66,7 @@ def format_push_event(payload: dict) -> tuple[str, str]:
         text += f"{commit_count} коммит(ов)\n"
 
     if compare_url:
-        text += f'\n<a href="{compare_url}">Сравнить изменения</a>'
+        text += f'\n<a href="{html.escape(compare_url)}">📊 Сравнить все изменения</a>'
 
     # event_key для редактирования сообщений
     event_key = f"push:{repo_name}:{ref}"
