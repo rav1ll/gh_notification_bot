@@ -102,5 +102,34 @@ class GitHubAPI:
             "private": repo.private
         }
 
+    def get_pr_commits(self, owner: str, repo_name: str, pr_number: int) -> list:
+        """
+        Получить список коммитов из Pull Request
+        """
+
+        repo = self.get_repo(owner, repo_name)
+        if not repo:
+            return []
+
+        try:
+            pr = repo.get_pull(pr_number)
+            commits = []
+
+            # Ограничиваем до 10 коммитов для избежания перегрузки
+            for commit in list(pr.get_commits())[:10]:
+                commits.append({
+                    "sha": commit.sha,
+                    "message": commit.commit.message,
+                    "author": {
+                        "name": commit.commit.author.name if commit.commit.author else "Unknown"
+                    },
+                    "html_url": commit.html_url
+                })
+
+            return commits
+        except GithubException as e:
+            print(f"Ошибка получения коммитов PR: {e}")
+            return []
+
 
 github_api = GitHubAPI()

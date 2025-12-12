@@ -4,11 +4,20 @@ FROM python:3.11-slim
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Копируем файл зависимостей
-COPY src/requirements.txt .
+# Устанавливаем Poetry
+ENV POETRY_VERSION=1.8.3 \
+    POETRY_HOME="/opt/poetry" \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_CREATE=false \
+    POETRY_CACHE_DIR=/tmp/poetry_cache
 
-# Устанавливаем зависимости
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir poetry==${POETRY_VERSION}
+
+# Копируем файлы конфигурации зависимостей
+COPY pyproject.toml poetry.lock* ./
+
+# Устанавливаем зависимости (без dev-зависимостей)
+RUN poetry install --only main --no-root && rm -rf $POETRY_CACHE_DIR
 
 # Копируем код приложения
 COPY src/ .
